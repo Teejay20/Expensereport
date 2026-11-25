@@ -1,0 +1,28 @@
+Invoice
+MISUMI USA, INC.
+www.misumiusa.com
+Debit Number: LD6000012100U2
+Ref#: LN6003141800U2
+Page: 1
+Bill To: U77893   Ship To: U77893
+NFINITE NANOTECHNOLOGY   NFINITE NANOTECHNOLOGY
+265 Main DR   265 Main DR
+UNIT 1   UNIT 1
+WATERLOO, ON N2V 0E2   WATERLOO, ON N2V 0E2
+CANADA   CANADA
+Phone:
+Fax:
+Shipping number: LN6003141800U2   Order Date:   March 12, 2026
+SO No.:   NC1111183F   Shipping Date: March 12, 2026
+PO No.:   2026030715   Journal Date: March 12, 2026
+No Product_Code   Original Number
+Product_Name   Qty   Unit Price   Amount(USD)
+PO Sub Reference
+1 Shipping & Handling   000002
+Shipping & Handling   1   77.32   77.32
+Mail checks to:   Debit Total: 77.32
+USA:   CANADA:   Tax:   0.00
+26797 Network Place   PO Box 15001 Station A   77.32
+Grand Total:
+Chicago, IL 60673-1267   Toronto, ON M5W 1C1
+Phone: 800-681-7475, #3
