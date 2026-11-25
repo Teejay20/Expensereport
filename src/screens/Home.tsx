@@ -6,6 +6,7 @@ import { cadFor } from '../lib/report';
 import type { Expense, Settings } from '../lib/types';
 import { FilePick, Header, Icon, MonthNav, useObjectUrl } from '../components/ui';
 import { go, setPendingFiles, useMonth } from '../state';
+import { ScanTip } from './ScanGuide';
 
 function Thumb({ e }: { e: Expense }) {
   const att = useLiveQuery(() => (e.attachmentIds[0] ? db.attachments.get(e.attachmentIds[0]) : undefined), [e.attachmentIds[0]]);
@@ -65,6 +66,7 @@ export function Home({ settings }: { settings: Settings }) {
           <button className="action" onClick={() => go('trip/new')}><Icon name="car" />Trip</button>
           <button className="action" onClick={() => go('expense/new')}><Icon name="pencil" />Manual</button>
         </div>
+        <ScanTip onOpen={() => go('scan-help')} />
 
         {expenses && list.length === 0 && (
           <div className="empty">

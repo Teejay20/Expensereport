@@ -6,7 +6,8 @@ import { compressForStorage } from '../lib/image';
 import { fmtMoney, round2 } from '../lib/money';
 import { todayISO } from '../lib/dates';
 import { CATEGORIES, type Attachment, type Expense, type Settings } from '../lib/types';
-import { AttachmentThumb, Confirm, Field, FilePick, Header, Icon, MoneyInput, Viewer, useObjectUrl } from '../components/ui';
+import { AttachmentThumb, Confirm, Field, FilePick, Header, Icon, MoneyInput, useObjectUrl } from '../components/ui';
+import { ReceiptViewer } from '../components/ReceiptPreview';
 import { back, toast } from '../state';
 
 interface Stop { text: string; place?: Place; options?: Place[]; busy?: boolean }
@@ -246,7 +247,7 @@ export function TripEditor({ id, settings }: { id?: string; settings: Settings }
           <button className="btn primary" onClick={save}><Icon name="check" size={18} />Save trip</button>
         </div>
       </div>
-      {viewing && <Viewer a={viewing} onClose={() => setViewing(undefined)} />}
+      {viewing && <ReceiptViewer a={viewing} onClose={() => setViewing(undefined)} />}
     </>
   );
 }

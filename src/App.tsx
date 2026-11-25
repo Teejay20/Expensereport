@@ -6,6 +6,7 @@ import { takeSharedFiles } from './lib/share';
 import { preloadOcr } from './lib/ocr';
 import { Home } from './screens/Home';
 import { SettingsScreen } from './screens/Settings';
+import { ScanGuide } from './screens/ScanGuide';
 
 const ExpenseEditor = lazy(() => import('./screens/ExpenseEditor').then((m) => ({ default: m.ExpenseEditor })));
 const TripEditor = lazy(() => import('./screens/TripEditor').then((m) => ({ default: m.TripEditor })));
@@ -52,6 +53,7 @@ export default function App() {
     case 'report': screen = <MonthEnd settings={s} />; break;
     case 'settings': screen = <SettingsScreen settings={s} />; break;
     case 'import': screen = <BatchImport settings={s} />; break;
+    case 'scan-help': screen = <ScanGuide />; break;
     case 'inbox': screen = null; break;
     default: screen = <Home settings={s} />;
   }

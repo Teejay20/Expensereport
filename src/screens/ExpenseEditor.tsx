@@ -7,7 +7,8 @@ import { normalizeText, KNOWN_CURRENCIES, combineReceipts } from '../lib/receipt
 import { referenceRate } from '../lib/fx';
 import { todayISO } from '../lib/dates';
 import { CATEGORIES, type Attachment, type Expense, type Settings } from '../lib/types';
-import { AttachmentThumb, Confirm, Field, FilePick, Header, Icon, MoneyInput, ProgressBar, Viewer } from '../components/ui';
+import { AttachmentThumb, Confirm, Field, FilePick, Header, Icon, MoneyInput, ProgressBar } from '../components/ui';
+import { ReceiptPreview, ReceiptViewer } from '../components/ReceiptPreview';
 import { back, takePendingFiles, toast } from '../state';
 
 const num = (s: string) => {
@@ -39,6 +40,7 @@ export function ExpenseEditor({ id, settings }: { id?: string; settings: Setting
   const [warnings, setWarnings] = useState<string[]>([]);
   const [chipTarget, setChipTarget] = useState<'total' | 'tax' | 'cad'>('total');
   const [viewing, setViewing] = useState<Attachment>();
+  const [selId, setSelId] = useState<string>();
   const [flash, setFlash] = useState<string>('');
   const [fxRef, setFxRef] = useState<{ rate: number; source: string }>();
   const [pages, setPages] = useState<PageRead[]>([]);
@@ -191,6 +193,7 @@ export function ExpenseEditor({ id, settings }: { id?: string; settings: Setting
     back();
   }
 
+  const selected = atts.find((a) => a.id === selId) ?? atts[0];
   const fl = (k: string) => (flash.includes(k) ? ' flash' : '');
 
   return (
@@ -204,12 +207,13 @@ export function ExpenseEditor({ id, settings }: { id?: string; settings: Setting
           <h2><Icon name="doc" size={18} />Receipt</h2>
           <div className="thumbs">
             {atts.map((a) => (
-              <AttachmentThumb key={a.id} a={a} onOpen={() => setViewing(a)} onRotate={() => rotate(a)}
+              <AttachmentThumb key={a.id} a={a} selected={atts.length > 1 && a.id === selected?.id} onOpen={() => setSelId(a.id)} onRotate={() => rotate(a)}
                 onRemove={() => { setAtts((x) => x.filter((y) => y.id !== a.id)); }} />
             ))}
             <FilePick className="add-thumb" accept="image/*" capture onFiles={(fs) => addFiles(fs, true, atts.length > 0)}><Icon name="camera" />{atts.length ? 'Add page' : 'Photo'}</FilePick>
             <FilePick className="add-thumb" accept="image/*,application/pdf,.pdf" multiple onFiles={(fs) => addFiles(fs, true, atts.length > 0)}><Icon name="upload" />File</FilePick>
           </div>
+          <ReceiptPreview a={selected} onFullScreen={() => selected && setViewing(selected)} />
           {warnings.length > 0 && <div className="small muted" style={{ marginTop: 8 }}>Check: {warnings.join(' · ')}</div>}
           {pages.length > 1 && <div className="small muted" style={{ marginTop: 4 }}>{pages.length} pages read.</div>}
           {suggest && (
@@ -297,7 +301,7 @@ export function ExpenseEditor({ id, settings }: { id?: string; settings: Setting
           <button className="btn primary" disabled={!!busy} onClick={save}><Icon name="check" size={18} />Save</button>
         </div>
       </div>
-      {viewing && <Viewer a={viewing} onClose={() => setViewing(undefined)} />}
+      {viewing && <ReceiptViewer a={viewing} onClose={() => setViewing(undefined)} />}
     </>
   );
 }

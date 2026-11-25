@@ -79,30 +79,18 @@ export function useObjectUrl(blob?: Blob): string | undefined {
   return url;
 }
 
-export function AttachmentThumb({ a, onOpen, onRemove, onRotate }: { a: Attachment; onOpen?: () => void; onRemove?: () => void; onRotate?: () => void }) {
+export function AttachmentThumb({ a, onOpen, onRemove, onRotate, selected }: { a: Attachment; onOpen?: () => void; onRemove?: () => void; onRotate?: () => void; selected?: boolean }) {
   const url = useObjectUrl(a.blob);
   const isPdf = a.mime === 'application/pdf';
   return (
     <div className="thumb">
-      <button className="thumb-img" onClick={onOpen} aria-label={`Open ${a.name}`}>
+      <button className={`thumb-img${selected ? ' selected' : ''}`} onClick={onOpen} aria-label={`Open ${a.name}`}>
         {isPdf ? <span className="pdf-badge">PDF</span> : url && <img src={url} alt="" />}
       </button>
       <div className="thumb-actions">
         {onRotate && !isPdf && <button className="mini" onClick={onRotate} aria-label="Rotate"><Icon name="rotate" /></button>}
         {onRemove && <button className="mini danger" onClick={onRemove} aria-label="Remove"><Icon name="x" /></button>}
       </div>
-    </div>
-  );
-}
-
-export function Viewer({ a, onClose }: { a: Attachment; onClose: () => void }) {
-  const url = useObjectUrl(a.blob);
-  return (
-    <div className="viewer" role="dialog" onClick={onClose}>
-      <button className="icon-btn viewer-close" aria-label="Close"><Icon name="x" /></button>
-      {a.mime === 'application/pdf'
-        ? <iframe title={a.name} src={url} onClick={(e) => e.stopPropagation()} />
-        : <img src={url} alt={a.name} onClick={(e) => e.stopPropagation()} />}
     </div>
   );
 }
@@ -169,6 +157,10 @@ const PATHS: Record<string, string> = {
   map: 'M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14',
   doc: 'M6 3h9l4 4v14H6zM14 3v5h5',
   card: 'M3 6h18v12H3zM3 10h18M7 15h4',
+  minus: 'M5 12h14',
+  expand: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',
+  scan: 'M4 8V5a1 1 0 011-1h3M16 4h3a1 1 0 011 1v3M20 16v3a1 1 0 01-1 1h-3M8 20H5a1 1 0 01-1-1v-3M7 12h10',
+  help: 'M12 21a9 9 0 100-18 9 9 0 000 18zM9.5 9a2.5 2.5 0 015 .5c0 1.5-2.5 2-2.5 3.5M12 17h.01',
 };
 
 export function Icon({ name, size = 22 }: { name: string; size?: number }) {

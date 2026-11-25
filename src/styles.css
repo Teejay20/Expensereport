@@ -239,3 +239,32 @@ details summary { cursor: pointer; font-weight: 600; font-size: 14px; color: var
 pre.ocr { white-space: pre-wrap; font-size: 12px; background: var(--surface-2); padding: 10px; border-radius: 8px; max-height: 240px; overflow: auto; }
 .steps-list { padding-left: 20px; margin: 6px 0; }
 .steps-list li { margin-bottom: 6px; }
+
+/* Receipt preview (editor) */
+.preview { margin-top: 12px; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--surface-2); }
+.preview-scroll { max-height: 340px; overflow: auto; -webkit-overflow-scrolling: touch; transition: max-height .2s; }
+.preview-scroll.tall { max-height: 70vh; }
+.preview-page { position: relative; border-bottom: 4px solid var(--border); }
+.preview-page:last-child { border-bottom: 0; }
+.preview-page img { display: block; width: 100%; height: auto; background: #fff; }
+.page-tag { position: absolute; top: 6px; left: 6px; background: rgba(0,0,0,.6); color: #fff; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
+.preview-bar { display: flex; align-items: center; gap: 6px; padding: 6px 8px; background: var(--surface); border-top: 1px solid var(--border); }
+.preview-msg { padding: 30px 12px; text-align: center; color: var(--muted); font-size: 14px; }
+.preview-msg.light { color: #ddd; }
+.thumb-img.selected { outline: 3px solid var(--primary); outline-offset: 1px; }
+
+/* Full-screen viewer */
+.viewer2 { position: fixed; inset: 0; z-index: 100; background: #111; display: flex; flex-direction: column; }
+.viewer2-bar { display: flex; align-items: center; gap: 4px; padding: calc(env(safe-area-inset-top) + 6px) 8px 6px 14px; background: #1c1c1c; color: #fff; }
+.viewer2-title { flex: 1; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.icon-btn.light { color: #fff; }
+.zoom-label { font-size: 12px; min-width: 40px; text-align: center; color: #ccc; }
+.viewer2-body { flex: 1; overflow: auto; -webkit-overflow-scrolling: touch; padding: 8px; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; touch-action: pan-x pan-y pinch-zoom; }
+.viewer2-body img { display: block; max-width: none; background: #fff; border-radius: 4px; margin: 0 auto; }
+
+/* Scan guide */
+.guide ol { padding-left: 20px; margin: 6px 0 10px; }
+.guide li { margin-bottom: 6px; }
+.guide h3 { font-size: 15px; margin: 12px 0 4px; }
+.tip { display: flex; gap: 10px; align-items: flex-start; }
+.tip .x { margin-left: auto; }

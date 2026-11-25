@@ -7,7 +7,7 @@ import { KNOWN_CURRENCIES } from '../lib/receiptParser';
 import { todayISO, monthKey } from '../lib/dates';
 import type { Settings as S } from '../lib/types';
 import { Field, FilePick, Header, Icon, MoneyInput } from '../components/ui';
-import { back, toast } from '../state';
+import { back, go, toast } from '../state';
 
 export function SettingsScreen({ settings }: { settings: S }) {
   const [s, setS] = useState<S>(settings);
@@ -68,6 +68,8 @@ export function SettingsScreen({ settings }: { settings: S }) {
         </div>
 
         <button className="btn primary block" onClick={save} style={{ marginBottom: 12 }}><Icon name="check" size={18} />Save settings</button>
+
+        <button className="btn block" style={{ marginBottom: 12 }} onClick={() => go('scan-help')}><Icon name="scan" size={18} />How to scan with your phone's scanner</button>
 
         <div className="card">
           <h2>Your data</h2>
