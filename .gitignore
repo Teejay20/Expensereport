@@ -1,0 +1,12 @@
+node_modules
+dist
+public/tesseract
+*.local
+.DS_Store
+*.tsbuildinfo
+*.traineddata
+.env
+.env.*
+coverage
+playwright-report
+test-results
