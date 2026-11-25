@@ -61,6 +61,9 @@ export function SettingsScreen({ settings }: { settings: S }) {
               <option value="DMY">Day/Month (3 April)</option>
             </select>
           </Field>
+          <Field label="Sales tax rate (%)" hint="Used by the “tax included” button – Ontario HST 13%">
+            <MoneyInput value={String(s.salesTaxRate ?? 13)} onChange={(v) => set({ salesTaxRate: parseFloat(v) || 0 })} />
+          </Field>
           <Field label="Home / office address" hint="Pre-filled as the start of new trips"><input className="input" value={s.homeAddress ?? ''} onChange={(e) => set({ homeAddress: e.target.value })} /></Field>
         </div>
 

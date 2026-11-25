@@ -80,6 +80,8 @@ export interface Settings {
   /** Date style used when a receipt date is ambiguous (03/04/2026). */
   dateOrder: 'MDY' | 'DMY';
   homeAddress?: string;
+  /** Sales tax % used by the 'tax included' helper (Ontario HST = 13). */
+  salesTaxRate?: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -92,6 +94,7 @@ export const DEFAULT_SETTINGS: Settings = {
   fileNamePattern: 'ExpensesReimbursementForm_{initials}_{Month}_{YYYY}',
   dateOrder: 'MDY',
   homeAddress: '',
+  salesTaxRate: 13,
 };
 
 /** Merchant memory: learns category/description the user chose last time. */

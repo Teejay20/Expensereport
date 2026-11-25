@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { db, deleteExpense, rememberedMerchant, saveExpense, uid, attachmentsOf } from '../lib/db';
-import { ingestFile, isPdf } from '../lib/ingest';
+import { ingestFile, isPdf, type PageRead } from '../lib/ingest';
 import { rotateImage, compressForStorage } from '../lib/image';
 import { findAmounts, fmtMoney, round2 } from '../lib/money';
-import { normalizeText, KNOWN_CURRENCIES } from '../lib/receiptParser';
+import { normalizeText, KNOWN_CURRENCIES, combineReceipts } from '../lib/receiptParser';
 import { referenceRate } from '../lib/fx';
 import { todayISO } from '../lib/dates';
 import { CATEGORIES, type Attachment, type Expense, type Settings } from '../lib/types';
@@ -41,7 +41,12 @@ export function ExpenseEditor({ id, settings }: { id?: string; settings: Setting
   const [viewing, setViewing] = useState<Attachment>();
   const [flash, setFlash] = useState<string>('');
   const [fxRef, setFxRef] = useState<{ rate: number; source: string }>();
+  const [pages, setPages] = useState<PageRead[]>([]);
+  const [suggest, setSuggest] = useState<{ total: number; tax: number; note: string }>();
   const set = (patch: Partial<Form>) => setF((x) => ({ ...x, ...patch }));
+  const formRef = useRef(f);
+  formRef.current = f;
+  const pagesRef = useRef<PageRead[]>([]);
 
   // Load existing expense or process files handed over from Home / share sheet
   useEffect(() => {
@@ -65,15 +70,17 @@ export function ExpenseEditor({ id, settings }: { id?: string; settings: Setting
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  async function addFiles(files: File[], parse: boolean) {
+  async function addFiles(files: File[], parse: boolean, extra = false) {
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       try {
-        if (parse && i === 0) {
+        if (parse && i === 0 && !extra) {
           setBusy({ p: 0.02, label: 'Starting…' });
           const r = await ingestFile(file, settings, (p, label) => setBusy({ p, label }));
           setAtts((a) => [...a, r.attachment]);
           setOcrText(r.text);
+          pagesRef.current = r.pages;
+          setPages(r.pages);
           setWarnings(r.parsed.warnings);
           const mem = await rememberedMerchant(r.parsed.merchant);
           const patch: Partial<Form> = {
@@ -90,6 +97,20 @@ export function ExpenseEditor({ id, settings }: { id?: string; settings: Setting
           setTimeout(() => setFlash(''), 1300);
           const found = [r.parsed.total !== undefined && 'total', r.parsed.date && 'date', r.parsed.tax && 'tax'].filter(Boolean);
           toast(found.length ? `Found ${found.join(', ')} – please check` : 'Could not read much – tap the amounts below', found.length ? 'ok' : 'err');
+        } else if (parse) {
+          // Extra page/photo for the same expense (e.g. invoice behind a card slip): read it and combine
+          setBusy({ p: 0.02, label: 'Reading extra page…' });
+          const r = await ingestFile(file, settings, (p, label) => setBusy({ p, label }));
+          setAtts((a) => [...a, r.attachment]);
+          setOcrText((t) => (t ? `${t}\n\n— page —\n\n${r.text}` : r.text));
+          const hadPages = pagesRef.current.length > 0;
+          pagesRef.current = [...pagesRef.current, ...r.pages];
+          setPages(pagesRef.current);
+          const c = combineReceipts(pagesRef.current);
+          const cur = { total: num(formRef.current.total), tax: num(formRef.current.tax) };
+          if (hadPages && c.total && (Math.abs(c.total - cur.total) > 0.005 || Math.abs((c.tax ?? 0) - cur.tax) > 0.005)) {
+            setSuggest({ total: c.total, tax: c.tax ?? 0, note: c.warnings[0] ?? `Combined ${pagesRef.current.length} pages` });
+          }
         } else {
           const a: Attachment = isPdf(file)
             ? { id: uid(), name: file.name, mime: 'application/pdf', blob: file, role: 'receipt', createdAt: Date.now() }
@@ -186,10 +207,18 @@ export function ExpenseEditor({ id, settings }: { id?: string; settings: Setting
               <AttachmentThumb key={a.id} a={a} onOpen={() => setViewing(a)} onRotate={() => rotate(a)}
                 onRemove={() => { setAtts((x) => x.filter((y) => y.id !== a.id)); }} />
             ))}
-            <FilePick className="add-thumb" accept="image/*" capture onFiles={(fs) => addFiles(fs, atts.length === 0)}><Icon name="camera" />Photo</FilePick>
-            <FilePick className="add-thumb" accept="image/*,application/pdf,.pdf" onFiles={(fs) => addFiles(fs, atts.length === 0)}><Icon name="upload" />File</FilePick>
+            <FilePick className="add-thumb" accept="image/*" capture onFiles={(fs) => addFiles(fs, true, atts.length > 0)}><Icon name="camera" />{atts.length ? 'Add page' : 'Photo'}</FilePick>
+            <FilePick className="add-thumb" accept="image/*,application/pdf,.pdf" multiple onFiles={(fs) => addFiles(fs, true, atts.length > 0)}><Icon name="upload" />File</FilePick>
           </div>
           {warnings.length > 0 && <div className="small muted" style={{ marginTop: 8 }}>Check: {warnings.join(' · ')}</div>}
+          {pages.length > 1 && <div className="small muted" style={{ marginTop: 4 }}>{pages.length} pages read.</div>}
+          {suggest && (
+            <div className="notice info" style={{ marginTop: 10, marginBottom: 0 }}>
+              <Icon name="doc" size={18} />
+              <div style={{ flex: 1 }}>{suggest.note}: total <b>{suggest.total.toFixed(2)}</b>, tax <b>{suggest.tax.toFixed(2)}</b></div>
+              <button className="btn sm primary" onClick={() => { set({ total: str(suggest.total), tax: suggest.tax ? str(suggest.tax) : '' }); setSuggest(undefined); setFlash('total,tax'); setTimeout(() => setFlash(''), 1300); }}>Apply</button>
+            </div>
+          )}
         </div>
 
         {chips.length > 0 && (
@@ -232,6 +261,13 @@ export function ExpenseEditor({ id, settings }: { id?: string; settings: Setting
             <Field label="Total"><span className={fl('total')}><MoneyInput value={f.total} onChange={(v) => set({ total: v })} /></span></Field>
             <Field label="Tax"><span className={fl('tax')}><MoneyInput value={f.tax} onChange={(v) => set({ tax: v })} /></span></Field>
           </div>
+          {f.currency === home && total > 0 && !tax && (settings.salesTaxRate ?? 13) > 0 && (
+            <button className="btn sm" style={{ marginBottom: 8 }} onClick={() => {
+              const r = (settings.salesTaxRate ?? 13) / 100;
+              set({ tax: str(total - total / (1 + r)) });
+              setFlash('tax'); setTimeout(() => setFlash(''), 1300);
+            }}>+ {settings.salesTaxRate ?? 13}% tax included in total ({fmtMoney(round2(total - total / (1 + (settings.salesTaxRate ?? 13) / 100)), home)})</button>
+          )}
           <div className="kpi"><span className="muted">Pre-tax</span><b>{fmtMoney(preTax, f.currency)}</b></div>
         </div>
 

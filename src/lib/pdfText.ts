@@ -9,7 +9,7 @@ async function open(data: ArrayBuffer) {
   return pdfjs.getDocument({ data: new Uint8Array(data.slice(0)), isEvalSupported: false }).promise;
 }
 
-export async function extractPdfText(data: ArrayBuffer, maxPages = 6): Promise<{ text: string; pages: number }> {
+export async function extractPdfText(data: ArrayBuffer, maxPages = 6): Promise<{ text: string; pages: number; pageTexts: string[] }> {
   const doc = await open(data);
   const parts: string[] = [];
   for (let p = 1; p <= Math.min(doc.numPages, maxPages); p++) {
@@ -22,7 +22,7 @@ export async function extractPdfText(data: ArrayBuffer, maxPages = 6): Promise<{
   }
   const pages = doc.numPages;
   await doc.destroy();
-  return { text: parts.join('\n'), pages };
+  return { text: parts.join('\n'), pages, pageTexts: parts };
 }
 
 export async function renderPdfPages(data: ArrayBuffer, scale = 2, maxPages = 20): Promise<HTMLCanvasElement[]> {

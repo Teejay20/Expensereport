@@ -18,7 +18,8 @@ function getWorker(): Promise<Worker> {
       cacheMethod: 'write', // keep a copy in IndexedDB as well
       logger: (m) => progressCb?.(m.progress ?? 0, m.status ?? ''),
     }).then(async (w) => {
-      await w.setParameters({ preserve_interword_spaces: '1', tessedit_pageseg_mode: PSM.AUTO });
+      // Receipts are one column of text: "single block" reads them far better than automatic layout.
+      await w.setParameters({ preserve_interword_spaces: '1', tessedit_pageseg_mode: PSM.SINGLE_BLOCK });
       return w;
     });
     workerP.catch(() => (workerP = null));

@@ -3,7 +3,7 @@
 
 import { findAmounts, lastAmount, round2 } from './money';
 import { findDates, pickByRecency, recencyPenalty, todayISO } from './dates';
-import { recognizeMerchant } from './categories';
+import { inferCategory, OPERATOR_LINES, recognizeMerchant } from './categories';
 
 export interface ParsedReceipt {
   merchant?: string;
@@ -51,7 +51,10 @@ export function normalizeText(text: string): string {
     .replace(/(\d)\s+\.(\d{2})\b/g, '$1.$2')
     // OCR often reads "$" as "S" before digits: "S21.70"
     .replace(/(^|\s)S(\d+\.\d{2})\b/g, '$1$$$2')
-    .replace(/[ \t]+/g, ' ');
+    // "H.S.T." / "G.S.T." → "HST" / "GST"
+    .replace(/\b([HGPQ])\.\s?S\.\s?T\.?/gi, (_, a) => `${a.toUpperCase()}ST`)
+    .replace(/\t/g, '   ')
+    .replace(/ {4,}/g, '   ');
 }
 
 export function detectCurrency(text: string, home = 'CAD'): { code: string; confident: boolean } {
@@ -90,8 +93,12 @@ const TOTAL_EXCLUDE = /sub\s?-?total|total\s+(savings|saved|items?|qty|quantity|
 const TOTAL_STRONG = /grand\s+total|order\s+total|total\s+(due|paid|charged|amount)|amount\s+(due|paid|charged)|balance\s+due|invoice\s+total|debit\s+total/i;
 const TOTAL_WEAK = /\btotal\b|\btot\b/i;
 const TOTAL_FALLBACK = /\b(amount|fee|purchase|m\/c tend|visa|mastercard|amex|debit|paid|charged|payment)\b/i;
-const SUBTOTAL = /sub\s?-?total|\bpass:|\bfare\b|amount\s+before\s+tax/i;
-const TAX_LABEL = /\b(HST|GST|PST|QST|RST|TPS|TVQ|TVH|VAT|IVA|MWST|GST\/HST|tax(?:es)?|sales\s+tax)\b/i;
+const SUBTOTAL = /sub\s?-?total|sub\/sous|\bsous[- ]total|\bpass:|\bfare\b|amount\s+before\s+tax|\bnet\s*:/i;
+/** GST 5, HST 13/15, QC 14.975, BC 12, SK 11, MB 12, PST-only 6/7/9.975 */
+const TAX_RATES = [5, 6, 7, 9.975, 11, 12, 13, 14.975, 15];
+/** Distance (in % points) between the receipt's tax rate and the nearest real rate. */
+export const taxRateError = (tax: number, total: number) => Math.min(...TAX_RATES.map((r) => Math.abs((tax / (total - tax)) * 100 - r)));
+const TAX_LABEL = /\b(HST|H[S5]|H5T|GST|PST|QST|RST|TPS|TVQ|TVH|VAT|IVA|MWST|GST\/HST|tax(?:es)?|sales\s+tax)\b/i;
 const TAX_EXCLUDE = /pre-?tax|tax\s*(id|no\.?|number|reg|registration|#)|business\s+number|(hst|gst|qst|tps|tvq)\s*(#|no\.?|number|reg)|incl\.?\s*tax|tax\s+included|calculated\s+pre-tax|before\s+tax|tax\s+exempt/i;
 
 function linesOf(text: string) {
@@ -106,7 +113,7 @@ function amountForLabel(lines: string[], i: number, labelRe: RegExp): number | u
   const hits = findAmounts(after);
   if (hits.length) return hits[0].value;
   // label alone on its line (e.g. "Tax/VAT" ... "CAD $5.07" next line)
-  if (i + 1 < lines.length && findAmounts(lines[i + 1]).length && !/[a-z]{4,}/i.test(lines[i + 1].replace(/\b[A-Z]{3}\b/g, ''))) {
+  if (i + 1 < lines.length && findAmounts(lines[i + 1]).length && !/[a-z]{2,}/i.test(lines[i + 1].replace(/\b(CAD|USD|EUR|GBP)\b|\/mo\b/g, ''))) {
     return findAmounts(lines[i + 1])[0].value;
   }
   return undefined;
@@ -125,17 +132,22 @@ export function parseReceipt(rawText: string, opts: ParseOptions = {}): ParsedRe
   if (!merchant) {
     merchant = lines
       .slice(0, 8)
-      .find((l) => /[a-z]{3,}/i.test(l) && !/receipt|invoice|welcome|thank|customer|copy|total|\d{1,2}[/:]\d{2}|www\.|@|gmail|page \d/i.test(l) && !findAmounts(l).length)
+      .map((l) => l.split(/\s{3,}/)[0]) // drop right-hand columns ("REGIONAL HOSE   Remit To: …")
+      .find((l) => /[a-z]{3,}/i.test(l) && !OPERATOR_LINES.test(l) && !/receipt|invoice|welcome|thank|customer|copy|total|remit|\d{1,2}[/:]\d{2}|www\.|@|gmail|page \d/i.test(l) && !findAmounts(l).length)
       ?.replace(/[^\w &'.-]/g, '')
+      .replace(/\s+\w$/, '') // stray OCR letter at the end
       .trim()
+      .split(/\s+/).slice(0, 5).join(' ')
       .slice(0, 40);
   }
+  const category = rule?.category ?? inferCategory(text);
 
   // ---- Currency
   const cur = detectCurrency(text, home);
 
   // ---- Totals
   let total: number | undefined;
+  let totalGuessed = false;
   const strong: number[] = [];
   const weak: number[] = [];
   lines.forEach((l, i) => {
@@ -157,6 +169,7 @@ export function parseReceipt(rawText: string, opts: ParseOptions = {}): ParsedRe
       const all = lines.flatMap((l) => findAmounts(l).map((a) => a.value)).filter((v) => v > 0);
       if (all.length) {
         total = Math.max(...all);
+        totalGuessed = true;
         warnings.push('Total guessed as the largest amount');
       }
     }
@@ -190,6 +203,18 @@ export function parseReceipt(rawText: string, opts: ParseOptions = {}): ParsedRe
     const label = m[1].toUpperCase();
     if (!taxLines.some((t) => t.label === label)) taxLines.push({ label, amount: v });
   });
+  const taxTmp: number | undefined = totalTaxLine ?? (taxLines.length ? round2(taxLines.reduce((s, t) => s + t.amount, 0)) : undefined);
+  // No readable total line: the guess is probably the subtotal. If subtotal+tax appears (even with a
+  // dropped last digit, e.g. "$ 81.3"), use it.
+  if (totalGuessed && total !== undefined && taxTmp) {
+    const sum = round2(total + taxTmp);
+    const compact = text.replace(/\s/g, '');
+    if (compact.includes(sum.toFixed(2)) || compact.includes(sum.toFixed(2).slice(0, -1))) {
+      subtotal = total;
+      total = sum;
+      warnings.splice(warnings.indexOf('Total guessed as the largest amount'), 1, 'Total = subtotal + tax (total line unclear)');
+    }
+  }
   let tax: number | undefined = totalTaxLine ?? (taxLines.length ? round2(taxLines.reduce((s, t) => s + t.amount, 0)) : undefined);
 
   // Reconcile with subtotal/total
@@ -205,8 +230,20 @@ export function parseReceipt(rawText: string, opts: ParseOptions = {}): ParsedRe
     warnings.push('Tax looked too high – please check');
     tax = undefined;
   }
+  // OCR digit slip in the tax line (3.06 read as 3.00) while subtotal & total agree → trust total − subtotal
+  if (subtotal !== undefined && tax && total !== undefined && Math.abs(subtotal + tax - total) > 0.02) {
+    const implied = round2(total - subtotal);
+    // Which reading is right? The one whose rate matches a real Canadian sales-tax rate.
+    const rateErr = (t: number) => taxRateError(t, total!);
+    if (implied > 0 && implied <= total * 0.3 && Math.abs(implied - tax) < 1 && rateErr(implied) < rateErr(tax) && rateErr(implied) < 0.15) tax = implied;
+  }
   if (subtotal !== undefined && tax && total !== undefined && Math.abs(subtotal + tax - total) > 0.02) {
     warnings.push(`Subtotal ${subtotal.toFixed(2)} + tax ${tax.toFixed(2)} ≠ total ${total.toFixed(2)} – check the total`);
+    subtotal = round2(total - tax); // what the report uses anyway
+  }
+  if (tax && total !== undefined && taxRateError(tax, total) > 0.15 && !warnings.some((w) => w.includes('≠'))) {
+    // e.g. 3.00 on 26.56 = 12.7 % – likely an OCR slip (or a partly tax-exempt purchase)
+    warnings.push(`Tax ${tax.toFixed(2)} isn't a usual rate – check`);
   }
   if (subtotal === undefined && total !== undefined) subtotal = round2(total - (tax ?? 0));
 
@@ -218,7 +255,7 @@ export function parseReceipt(rawText: string, opts: ParseOptions = {}): ParsedRe
 
   return {
     merchant,
-    category: rule?.category,
+    category,
     date,
     currency: cur.code,
     currencyConfident: cur.confident,
@@ -258,4 +295,70 @@ export function pickReceiptDate(lines: string[], today: string, order: 'MDY' | '
   const agg = new Map<string, number>();
   for (const s of scored) agg.set(s.iso, Math.max(agg.get(s.iso) ?? -Infinity, s.score) + (agg.has(s.iso) ? 0.5 : 0));
   return [...agg.entries()].sort((a, b) => b[1] - a[1])[0][0];
+}
+
+/** Several separate invoices (each with its own tax line and a different total), not one document over several pages. */
+function separateInvoices(ps: ParsedReceipt[]): boolean {
+  const totals = ps.map((p) => p.total!.toFixed(2));
+  return ps.every((p) => (p.tax ?? 0) > 0) && new Set(totals).size === totals.length;
+}
+
+const PAYMENT_SLIP = /\b(approved|approval|auth(orization)?\.?\s*(#|code)?|appr\s+code|visa|mastercard|master card|amex|debit|interac|chip|tap|card\s*#|customer copy|cardholder)\b/i;
+
+/**
+ * Combine several pages/photos belonging to one expense, e.g. a card slip plus the invoices it paid.
+ * - If invoice totals add up to the card payment, tax = sum of invoice taxes.
+ * - Otherwise the largest total wins and tax comes from the page with that total.
+ */
+export function combineReceipts(pages: { parsed: ParsedReceipt; text: string }[]): ParsedReceipt {
+  const valid = pages.filter((p) => p.parsed.total !== undefined && p.parsed.total > 0);
+  if (pages.length === 1 || valid.length <= 1) {
+    const base = valid[0]?.parsed ?? pages[0]?.parsed;
+    const others = pages.map((p) => p.parsed);
+    return {
+      ...base,
+      merchant: base.merchant ?? others.find((o) => o.merchant)?.merchant,
+      category: base.category ?? others.find((o) => o.category)?.category,
+      date: base.date ?? others.find((o) => o.date)?.date,
+    };
+  }
+  const close = (a: number, b: number) => Math.abs(a - b) <= 0.02 * Math.max(1, pages.length);
+  const slips = valid.filter((p) => !p.parsed.tax && PAYMENT_SLIP.test(p.text));
+  const invoices = valid.filter((p) => !slips.includes(p));
+  const invTotal = round2(invoices.reduce((s, p) => s + (p.parsed.total ?? 0), 0));
+  const invTax = round2(invoices.reduce((s, p) => s + (p.parsed.tax ?? 0), 0));
+  const slip = slips.sort((a, b) => (b.parsed.total ?? 0) - (a.parsed.total ?? 0))[0];
+  const first = (k: 'merchant' | 'category' | 'date' | 'currency') =>
+    (slip?.parsed[k] as string | undefined) ?? valid.map((p) => p.parsed[k]).find(Boolean) as string | undefined;
+  const warnings: string[] = [];
+
+  let total: number, tax: number;
+  if (slip && invoices.length && close(slip.parsed.total!, invTotal)) {
+    total = slip.parsed.total!;
+    tax = invTax;
+  } else if (!slip && invoices.length > 1 && separateInvoices(invoices.map((p) => p.parsed))) {
+    total = invTotal; // several invoices, no payment slip: add them up
+    tax = invTax;
+    warnings.push(`Added up ${invoices.length} receipts`);
+  } else {
+    // One receipt split over pages (e.g. an email): largest total, preferring the page that shows the tax
+    const top = [...valid].sort((a, b) => (b.parsed.total ?? 0) - (a.parsed.total ?? 0) || (b.parsed.tax ?? 0) - (a.parsed.tax ?? 0))[0];
+    total = top.parsed.total!;
+    tax = top.parsed.tax ?? 0;
+    if (invoices.length && slip) warnings.push(`Invoices add up to ${invTotal.toFixed(2)}, payment was ${total.toFixed(2)} – check tax`);
+  }
+  // Prefer the latest invoice/slip date for the expense date (when it was paid)
+  const dates = valid.map((p) => p.parsed.date).filter((d): d is string => !!d).sort();
+  return {
+    merchant: first('merchant'),
+    category: first('category'),
+    date: slip?.parsed.date ?? dates[dates.length - 1],
+    currency: first('currency') ?? 'CAD',
+    currencyConfident: valid.every((p) => p.parsed.currencyConfident),
+    total,
+    tax,
+    subtotal: round2(total - tax),
+    taxLines: invoices.flatMap((p) => p.parsed.taxLines),
+    warnings,
+  };
 }
